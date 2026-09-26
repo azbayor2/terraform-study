@@ -1,0 +1,78 @@
+name: terraform plan
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# 같은 state를 동시에 건드리지 않도록 plan/apply를 한 줄로 세움
+concurrency:
+  group: terraform-state
+  cancel-in-progress: false
+
+env:
+  # ncloud provider: variables.tf의 access_key / secret_key로 들어감 (TF_VAR_ 뒤는 대소문자 구분)
+  TF_VAR_access_key: ${{ secrets.TF_VAR_ACCESS_KEY }}
+  TF_VAR_secret_key: ${{ secrets.TF_VAR_SECRET_KEY }}
+  # s3 backend (NCP Object Storage)
+  AWS_ACCESS_KEY_ID: ${{ secrets.TF_VAR_ACCESS_KEY }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_VAR_SECRET_KEY }}
+  # NCP Object Storage는 aws-chunked 체크섬 업로드를 지원하지 않음
+  AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.4
+          terraform_wrapper: false
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: terraform init
+        run: terraform init -input=false
+
+      - name: terraform validate
+        run: terraform validate -no-color
+
+      - name: terraform plan
+        id: plan
+        run: |
+          terraform plan -input=false -no-color -out=tfplan | tee plan.txt
+          exit ${PIPESTATUS[0]}
+
+      - name: PR에 plan 결과 코멘트
+        if: always() && steps.plan.outcome != 'skipped'
+        uses: actions/github-script@v7
+        env:
+          PLAN_OUTCOME: ${{ steps.plan.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            let plan = fs.existsSync('plan.txt') ? fs.readFileSync('plan.txt', 'utf8') : '(plan 출력 없음)';
+            if (plan.length > 60000) plan = '...(앞부분 생략)\n' + plan.slice(-60000);
+            const body = [
+              `### terraform plan: \`${process.env.PLAN_OUTCOME}\``,
+              '<details><summary>plan 결과 보기</summary>',
+              '',
+              '```',
+              plan,
+              '```',
+              '</details>',
+              '',
+              `커밋 ${context.sha.slice(0, 7)} 기준. PR을 merge하면 apply가 실행됩니다.`,
+            ].join('\n');
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body,
+            });

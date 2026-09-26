@@ -1,0 +1,72 @@
+name: terraform apply
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [master]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: terraform-state
+  cancel-in-progress: false
+
+env:
+  TF_VAR_access_key: ${{ secrets.TF_VAR_ACCESS_KEY }}
+  TF_VAR_secret_key: ${{ secrets.TF_VAR_SECRET_KEY }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.TF_VAR_ACCESS_KEY }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_VAR_SECRET_KEY }}
+  AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  apply:
+    # 그냥 닫힌 PR은 제외하고, 실제로 merge된 경우만
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      # merge 결과로 master에 생긴 커밋을 apply
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.4
+          terraform_wrapper: false
+
+      - name: terraform init
+        run: terraform init -input=false
+
+      - name: terraform apply
+        id: apply
+        run: |
+          terraform apply -input=false -no-color -auto-approve | tee apply.txt
+          exit ${PIPESTATUS[0]}
+
+      - name: PR에 apply 결과 코멘트
+        if: always() && steps.apply.outcome != 'skipped'
+        uses: actions/github-script@v7
+        env:
+          APPLY_OUTCOME: ${{ steps.apply.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            let out = fs.existsSync('apply.txt') ? fs.readFileSync('apply.txt', 'utf8') : '(apply 출력 없음)';
+            if (out.length > 60000) out = '...(앞부분 생략)\n' + out.slice(-60000);
+            const body = [
+              `### terraform apply: \`${process.env.APPLY_OUTCOME}\``,
+              '<details><summary>apply 결과 보기</summary>',
+              '',
+              '```',
+              out,
+              '```',
+              '</details>',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });
