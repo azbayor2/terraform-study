@@ -68,11 +68,7 @@ resource "ncloud_login_key" "this" {
 }
 
 data "ncloud_server_image_numbers" "this" {
-  filter {
-    name   = "name"
-    values = [var.server_image_name_regex]
-    regex  = true
-  }
+  server_image_name = var.server_image_name
   filter {
     name   = "hypervisor_type"
     values = ["KVM"]

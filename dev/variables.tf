@@ -25,10 +25,10 @@ variable "ssh_allowed_cidr" {
   default     = "0.0.0.0/0"
 }
 
-variable "server_image_name_regex" {
-  description = "사용할 OS 이미지 이름 (정규식)"
+variable "server_image_name" {
+  description = "사용할 OS 이미지 이름 (정확한 이름, 예: ubuntu-22.04-base, ubuntu-24.04-base)"
   type        = string
-  default     = "ubuntu-22.04.*"
+  default     = "ubuntu-22.04-base"
 }
 
 variable "server_spec_code" {
