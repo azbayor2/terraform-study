@@ -43,7 +43,7 @@ jobs:
       - name: terraform apply
         id: apply
         run: |
-          terraform apply -input=false -no-color -auto-approve | tee apply.txt
+          terraform apply -input=false -no-color -auto-approve 2>&1 | tee apply.txt
           exit ${PIPESTATUS[0]}
 
       - name: PR에 apply 결과 코멘트
