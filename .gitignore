@@ -1,0 +1,21 @@
+# 인증 정보
+backend.hcl
+*.tfvars
+*.tfvars.json
+
+# 로컬 작업 디렉터리 (provider 바이너리, backend 캐시)
+.terraform/
+
+# state 파일 (리소스 정보나 비밀값이 평문으로 들어감)
+*.tfstate
+*.tfstate.*
+
+# crash 로그
+crash.log
+crash.*.log
+
+# 개인 설정 덮어쓰기용 파일
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
